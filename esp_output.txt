@@ -1,0 +1,30 @@
+ESP file: 1034 bytes
+============================================================
+Header: TES4 (FormID=0x00000000, flags=0x00000000)
+  Master: SkyUI_SE.esp
+
+Total records: 2
+
+Record: QUST (FormID=0x01000801) EDID='yeolde_settings_quest' FULL='Setting quest'
+  Script: YeOldeBackupThread6 (status=0)
+  Script: YeOldeBackupThread1 (status=0)
+  Script: yeolde_patches (status=0)
+  Script: YeOldeRestoreThreadManager (status=0)
+    Property: YeOldeRestoreQuest = <ObjectRef> (type=1)
+  Script: YeOldeBackupThreadManager (status=0)
+    Property: YeOldeBackupQuest = <ObjectRef> (type=1)
+  Script: YeOldeBackupThread5 (status=0)
+  Script: YeOldeBackupThread3 (status=0)
+  Script: yeolde_mcm_settings (status=0)
+    Property: ModName = YeOlde - MCM Settings (type=2)
+  Script: YeOldeBackupThread2 (status=0)
+  Script: YeOldeBackupThread4 (status=0)
+
+Record: QUST (FormID=0x00000802) EDID='SKI_ConfigManagerInstance' FULL='SKI_ConfigManagerInstance'
+  Script: SKI_ConfigManager (status=0)
+    Property: YeOldeBackupQuest = <ObjectRef> (type=1)
+  Script: SKI_QF_ConfigManagerInstance (status=0)
+    Property: Alias_PlayerRef = <ObjectRef> (type=1)
+
+============================================================
+Done.

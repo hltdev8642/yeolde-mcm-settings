@@ -1,0 +1,225 @@
+============================================================
+Compiling main mod scripts...
+============================================================
+  Compiling: BackupConfig.psc
+Starting 1 compile threads for 1 files...
+Compiling "BackupConfig"...
+Starting assembly of BackupConfig
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: ModConfig.psc
+Starting 1 compile threads for 1 files...
+Compiling "ModConfig"...
+Starting assembly of ModConfig
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: OptionConfig.psc
+Starting 1 compile threads for 1 files...
+Compiling "OptionConfig"...
+Starting assembly of OptionConfig
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: PageConfig.psc
+Starting 1 compile threads for 1 files...
+Compiling "PageConfig"...
+Starting assembly of PageConfig
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: SKI_ConfigBase.psc
+Starting 1 compile threads for 1 files...
+Compiling "SKI_ConfigBase"...
+Starting assembly of SKI_ConfigBase
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: SKI_ConfigManager.psc
+Starting 1 compile threads for 1 files...
+Compiling "SKI_ConfigManager"...
+Starting assembly of SKI_ConfigManager
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: YeOldeBackupHelpers.psc
+Starting 1 compile threads for 1 files...
+Compiling "YeOldeBackupHelpers"...
+Starting assembly of YeOldeBackupHelpers
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: YeOldeBackupThread.psc
+Starting 1 compile threads for 1 files...
+Compiling "YeOldeBackupThread"...
+Starting assembly of YeOldeBackupThread
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: YeOldeBackupThread1.psc
+Starting 1 compile threads for 1 files...
+Compiling "YeOldeBackupThread1"...
+Starting assembly of YeOldeBackupThread1
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: YeOldeBackupThread2.psc
+Starting 1 compile threads for 1 files...
+Compiling "YeOldeBackupThread2"...
+Starting assembly of YeOldeBackupThread2
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: YeOldeBackupThread3.psc
+Starting 1 compile threads for 1 files...
+Compiling "YeOldeBackupThread3"...
+Starting assembly of YeOldeBackupThread3
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: YeOldeBackupThread4.psc
+Starting 1 compile threads for 1 files...
+Compiling "YeOldeBackupThread4"...
+Starting assembly of YeOldeBackupThread4
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: YeOldeBackupThread5.psc
+Starting 1 compile threads for 1 files...
+Compiling "YeOldeBackupThread5"...
+Starting assembly of YeOldeBackupThread5
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: YeOldeBackupThread6.psc
+Starting 1 compile threads for 1 files...
+Compiling "YeOldeBackupThread6"...
+Starting assembly of YeOldeBackupThread6
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: YeOldeBackupThreadManager.psc
+Starting 1 compile threads for 1 files...
+Compiling "YeOldeBackupThreadManager"...
+Starting assembly of YeOldeBackupThreadManager
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: YeOldeConfig.psc
+Starting 1 compile threads for 1 files...
+Compiling "YeOldeConfig"...
+Starting assembly of YeOldeConfig
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: YeOldeRestoreThreadManager.psc
+Starting 1 compile threads for 1 files...
+Compiling "YeOldeRestoreThreadManager"...
+Starting assembly of YeOldeRestoreThreadManager
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: yeolde_mcm_settings.psc
+Starting 1 compile threads for 1 files...
+Compiling "yeolde_mcm_settings"...
+Starting assembly of yeolde_mcm_settings
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+  Compiling: yeolde_patches.psc
+Starting 1 compile threads for 1 files...
+Compiling "yeolde_patches"...
+Starting assembly of yeolde_patches
+0 error(s), 0 warning(s)
+Assembly succeeded
+
+Compilation succeeded.
+
+Batch compile of 1 files finished. 1 succeeded, 0 failed.
+
+============================================================
+Compiling patch scripts...
+============================================================
+
+============================================================
+Done. Checking output timestamps:
+============================================================
+ Volume in drive H is NVME
+ Volume Serial Number is 88E7-A015
+
+ Directory of h:\_STEAM\The Elder Scrolls - Skyrim - Special Edition\Dev\yeolde-mcm-settings\YeOlde_-_MCM_Settings\scripts
+
+02/02/2026  10:43 AM            33,577 yeolde_mcm_settings.pex
+               1 File(s)         33,577 bytes
+               0 Dir(s)  17,526,874,112 bytes free
+ Volume in drive H is NVME
+ Volume Serial Number is 88E7-A015
+
+ Directory of h:\_STEAM\The Elder Scrolls - Skyrim - Special Edition\Dev\yeolde-mcm-settings\YeOlde_-_MCM_Settings\scripts
+
+02/02/2026  10:43 AM             5,822 BackupConfig.pex
+               1 File(s)          5,822 bytes
+               0 Dir(s)  17,526,874,112 bytes free
+ Volume in drive H is NVME
+ Volume Serial Number is 88E7-A015
+
+ Directory of h:\_STEAM\The Elder Scrolls - Skyrim - Special Edition\Dev\yeolde-mcm-settings\YeOlde_-_MCM_Settings\scripts
+
+02/02/2026  10:43 AM            22,516 ski_configmanager.pex
+               1 File(s)         22,516 bytes
+               0 Dir(s)  17,526,874,112 bytes free
