@@ -19,9 +19,15 @@ echo Compiling main mod scripts...
 echo ============================================================
 
 for %%f in ("%MAIN_SRC%\*.psc") do (
-    echo   Compiling: %%~nxf
-    "%COMPILER%" "%%f" -f="%FLAGS%" -i="%IMPORTS%" -o="%MAIN_OUT%"
-    if errorlevel 1 echo   ERROR on %%~nxf
+    if /i "%%~nf"=="ski_configbase" (
+        echo   Skipping:  %%~nxf  [keep existing pex]
+    ) else if /i "%%~nf"=="ski_configmanager" (
+        echo   Skipping:  %%~nxf  [keep existing pex]
+    ) else (
+        echo   Compiling: %%~nxf
+        "%COMPILER%" "%%f" -f="%FLAGS%" -i="%IMPORTS%" -o="%MAIN_OUT%"
+        if errorlevel 1 echo   ERROR on %%~nxf
+    )
 )
 
 echo.
