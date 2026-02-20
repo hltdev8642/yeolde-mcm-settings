@@ -1370,12 +1370,19 @@ function SetColorValue(int a_color)
 endFunction
 
 ; YeOlde
+; @interface - override GetForceTextOptionMaxAttempts() in a subclass to change the limit
+int function GetForceTextOptionMaxAttempts()
+	return 20
+endFunction
+
+; YeOlde
 function ForceTextOption(int a_index, string a_strValue, string a_stateValue)
 	{Set a specific value to a TextOption, used when restoring saved data}
 	string originalValue = _bak_strValueBuf[a_index]
 	if( originalValue != a_strValue)
-		while (_bak_strValueBuf[a_index] != a_strValue)
-			; Log("ForceTextOption loop - _strValueBuf: " + _strValueBuf[a_index] + ", a_strValue: " + a_strValue)
+		int maxAttempts = GetForceTextOptionMaxAttempts()
+		while (_bak_strValueBuf[a_index] != a_strValue && maxAttempts > 0)
+			maxAttempts -= 1
 			if (a_stateValue != "")
 				string oldState = GetState()
 				gotoState(a_stateValue)
@@ -1450,21 +1457,33 @@ int function OnRestoreRequest(int jMod)
 	int jPage = JMap.getObj(jMod, "(none)")
 	if (jPage > 0)
 		Log("  RestorePages() -> Page '(none)'")
-		_configManager.ShowBackupInfoMsg("Mod '" + ModName + "', page '(none)'...")
+		if (_configManager != None)
+			_configManager.ShowBackupInfoMsg("Mod '" + ModName + "', page '(none)'...")
+		endif
 		RestorePageOptions(jPage)		
-		_configManager.ShowBackupInfoMsg("Mod '" + ModName + "', page '(none)'... (DONE)")
+		if (_configManager != None)
+			_configManager.ShowBackupInfoMsg("Mod '" + ModName + "', page '(none)'... (DONE)")
+		endif
 	endif
 
 	int i = 0
-	while (i < Pages.Length)
+	int numPages = 0
+	if (Pages != None)
+		numPages = Pages.Length
+	endif
+	while (i < numPages)
 		jPage = JMap.getObj(jMod, Pages[i])
 		if (jPage > 0)
 			string msg = "Mod '" + ModName + "', page '" + Pages[i] + "'..."
 			Log("  RestorePages() -> " + msg)
-			_configManager.ShowBackupInfoMsg(msg)
+			if (_configManager != None)
+				_configManager.ShowBackupInfoMsg(msg)
+			endif
 			FakeSetPage(Pages[i], i)
 			RestorePageOptions(jPage)	
-			_configManager.ShowBackupInfoMsg(msg + " (DONE)")
+			if (_configManager != None)
+				_configManager.ShowBackupInfoMsg(msg + " (DONE)")
+			endif
 		else
 			Log("  RestorePages() -> No backup for page '" + Pages[i] + "'")
 		endif
@@ -1532,27 +1551,39 @@ int function OnBackupRequest(int jMod)
 	; YeOlde
 	; The default page is already opened. So we can backup it before looping in Pages.
 	Log("  BackupAllPagesOptions() -> Page '(none)'")		
-	_configManager.ShowBackupInfoMsg("Mod '" + ModName + "', page '(none)'...")
+	if (_configManager != None)
+		_configManager.ShowBackupInfoMsg("Mod '" + ModName + "', page '(none)'...")
+	endif
 	FakeSetPage("", -1) ; Default page
 	OnConfigOpen()	
 	BackupPageOptions(jMod)
-	_configManager.ShowBackupInfoMsg("Mod '" + ModName + "', page '(none)'... (DONE)")
+	if (_configManager != None)
+		_configManager.ShowBackupInfoMsg("Mod '" + ModName + "', page '(none)'... (DONE)")
+	endif
 	configOpened = true
 	
 
 	int i = 0
-	while (i < Pages.Length)
+	int numPages = 0
+	if (Pages != None)
+		numPages = Pages.Length
+	endif
+	while (i < numPages)
 		string msg = "Mod '" + ModName + "', page '" + Pages[i] + "'"
 		Log("  BackupAllPagesOptions() -> " + msg)
 
-		_configManager.ShowBackupInfoMsg(msg + "...")
+		if (_configManager != None)
+			_configManager.ShowBackupInfoMsg(msg + "...")
+		endif
 		FakeSetPage(Pages[i], i)
 		if (!configOpened)				
 			OnConfigOpen()	
 			configOpened = true
 		endif
 		BackupPageOptions(jMod)		
-		_configManager.ShowBackupInfoMsg(msg + "... (DONE)")
+		if (_configManager != None)
+			_configManager.ShowBackupInfoMsg(msg + "... (DONE)")
+		endif
 		i += 1
 	endwhile
 

@@ -173,7 +173,10 @@ endfunction
 
 ; Delete a single mod's backup file from disk
 function DeleteModBackup(string modName) global
-    string path = GetDefaultBackupModDirectory() + modName + ".json"
+    string path = GetDefaultBackupModDirectory() + modName
+    if (StringUtil.Find(modName, ".json") < 0)
+        path += ".json"
+    endif
     JContainers.removeFileAtPath(path)
     Log("DeleteModBackup() -> Removed: " + path)
 endfunction

@@ -1,4 +1,4 @@
-scriptname yeolde_mcm_settings extends SKI_ConfigBase
+scriptname yeolde_mcm_settings extends YeOlde_SKI_ConfigBase
 
 import Game
 
@@ -32,6 +32,13 @@ int             _editType = 0 ; 0=string,1=int,2=float,3=bool
 int             _editModCountOpt = 0
 int             _editKeyCountOpt = 0
 int             _editCurrentValueOpt = 0
+
+; Nested (paged) edit data tracking
+bool            _editIsNested = false
+string[]        _editPageList
+int             _editSelectedPageIdx = -1
+string[]        _editOptionIds
+int             _editPageCountOpt = 0
 
 ; Per-Mod Backup Variables (Feature 6)
 string[]        _perModNames
@@ -99,6 +106,10 @@ function InitializeVariables()
     _selectedSlotIndex = 0
     _editSelectedModIdx = -1
     _editSelectedKeyIdx = -1
+    _editIsNested = false
+    _editPageList = None
+    _editSelectedPageIdx = -1
+    _editOptionIds = None
     _perModSelectedIdx = -1
     _modSearchFilter = ""
     _editNewValue = ""
@@ -152,6 +163,49 @@ function SetTypedValue(int jObj, string keyName, string value, int a_type)
         endif
     else
         JMap.setStr(jObj, keyName, value)
+    endif
+endfunction
+
+; Read value from a nested (paged) backup option
+string function ReadNestedOptionValue(int jMod, string pageName, string optId)
+    int jPage = JMap.getObj(jMod, pageName)
+    if (jPage <= 0)
+        return ""
+    endif
+    int jOpt = JMap.getObj(jPage, optId)
+    if (jOpt <= 0)
+        return ""
+    endif
+    string sv = JMap.getStr(jOpt, "strValue")
+    float fv = JMap.getFlt(jOpt, "fltValue")
+    if (sv != "")
+        return sv
+    endif
+    return fv as string
+endfunction
+
+; Write value to a nested (paged) backup option
+function WriteNestedOptionValue(int jMod, string pageName, string optId, string value, int a_type)
+    int jPage = JMap.getObj(jMod, pageName)
+    if (jPage <= 0)
+        return
+    endif
+    int jOpt = JMap.getObj(jPage, optId)
+    if (jOpt <= 0)
+        return
+    endif
+    if (a_type == 0)
+        JMap.setStr(jOpt, "strValue", value)
+    elseif (a_type == 1)
+        JMap.setFlt(jOpt, "fltValue", value as float)
+    elseif (a_type == 2)
+        JMap.setFlt(jOpt, "fltValue", value as float)
+    elseif (a_type == 3)
+        if (value == "1" || value == "true" || value == "True")
+            JMap.setFlt(jOpt, "fltValue", 1.0)
+        else
+            JMap.setFlt(jOpt, "fltValue", 0.0)
+        endif
     endif
 endfunction
 
@@ -421,9 +475,25 @@ event OnPageReset(string a_page)
         if (_editKeyList != None)
             keyCount = _editKeyList.Length
         endif
-        _editKeyCountOpt = AddTextOption("Keys in mod", keyCount as string)
+        _editKeyCountOpt = AddTextOption("Keys", keyCount as string)
 
-        ; Row 4: Key selector
+        ; Row 4: Page selector (for nested/paged mod data)
+        string currentPageName = "(n/a)"
+        if (_editIsNested)
+            if (_editSelectedPageIdx >= 0 && _editPageList != None && _editSelectedPageIdx < _editPageList.Length)
+                currentPageName = _editPageList[_editSelectedPageIdx]
+            else
+                currentPageName = "(select page)"
+            endif
+        endif
+        AddMenuOptionST("EditSelectPage", "Select Page", currentPageName)
+        int pageCount = 0
+        if (_editPageList != None)
+            pageCount = _editPageList.Length
+        endif
+        _editPageCountOpt = AddTextOption("Pages", pageCount as string)
+
+        ; Row 5: Key selector
         string currentKeyName = "(none)"
         if (_editSelectedKeyIdx >= 0 && _editKeyList != None && _editSelectedKeyIdx < _editKeyList.Length)
             currentKeyName = _editKeyList[_editSelectedKeyIdx]
@@ -431,14 +501,20 @@ event OnPageReset(string a_page)
         AddMenuOptionST("EditSelectKey", "Select Key", currentKeyName)
         AddEmptyOption()
 
-        ; Row 5: Current value display
+        ; Row 6: Current value display
         string currentVal = ""
         if (_editSelectedModIdx >= 0 && _editSelectedKeyIdx >= 0 && _lastImportedBackup > 0)
             if (_editModList != None && _editKeyList != None)
                 if (_editSelectedModIdx < _editModList.Length && _editSelectedKeyIdx < _editKeyList.Length)
                     int jMod = JMap.getObj(_lastImportedBackup, _editModList[_editSelectedModIdx])
                     if (jMod > 0)
-                        currentVal = ReadValueAsString(jMod, _editKeyList[_editSelectedKeyIdx])
+                        if (_editIsNested && _editPageList != None && _editSelectedPageIdx >= 0 && _editOptionIds != None)
+                            if (_editSelectedKeyIdx < _editOptionIds.Length)
+                                currentVal = ReadNestedOptionValue(jMod, _editPageList[_editSelectedPageIdx], _editOptionIds[_editSelectedKeyIdx])
+                            endif
+                        else
+                            currentVal = ReadValueAsString(jMod, _editKeyList[_editSelectedKeyIdx])
+                        endif
                     endif
                 endif
             endif
@@ -745,7 +821,8 @@ state MCMValuesBackup
             BackupConfig.SaveActiveToSlot(_selectedSlotIndex, slotName)
 
             ShowMessage("Backup completed and saved to " + slotName + ".", false)
-            SetTextOptionValueST("Press to backup")
+            RefreshSlotNames()
+            ForcePageReset()
         endif
 	endEvent
 
@@ -976,6 +1053,10 @@ state EditImport
             _editKeyList = None
             _editSelectedModIdx = -1
             _editSelectedKeyIdx = -1
+            _editIsNested = false
+            _editPageList = None
+            _editSelectedPageIdx = -1
+            _editOptionIds = None
             return
         endif
 
@@ -993,6 +1074,10 @@ state EditImport
             _editSelectedModIdx = -1
             _editSelectedKeyIdx = -1
             _editKeyList = None
+            _editIsNested = false
+            _editPageList = None
+            _editSelectedPageIdx = -1
+            _editOptionIds = None
             SetTextOptionValueST("Imported " + nb + " mod(s)")
             SetTextOptionValue(_editModCountOpt, nb as string)
         endif
@@ -1034,25 +1119,58 @@ state EditSelectMod
         if (a_index >= 0 && a_index < _editModList.Length)
             _editSelectedModIdx = a_index
             _editSelectedKeyIdx = -1
+            _editSelectedPageIdx = -1
             SetMenuOptionValueST(_editModList[a_index])
 
-            ; Load keys for this mod
+            ; Load keys for this mod (detect nested vs flat structure)
             if (_lastImportedBackup > 0)
                 int jMod = JMap.getObj(_lastImportedBackup, _editModList[a_index])
                 if (jMod > 0)
-                    _editKeyList = JMap.allKeysPArray(jMod)
-                    int keyCountVal = 0
-                    if (_editKeyList != None)
-                        keyCountVal = _editKeyList.Length
+                    string[] topKeys = JMap.allKeysPArray(jMod)
+                    bool isNested = false
+                    if (topKeys != None && topKeys.Length > 0)
+                        int testObj = JMap.getObj(jMod, topKeys[0])
+                        if (testObj > 0)
+                            isNested = true
+                        endif
                     endif
-                    SetTextOptionValue(_editKeyCountOpt, keyCountVal as string)
+
+                    _editIsNested = isNested
+                    if (isNested)
+                        _editPageList = topKeys
+                        _editKeyList = None
+                        _editOptionIds = None
+                        int totalKeys = 0
+                        int pi = 0
+                        while (pi < topKeys.Length)
+                            int jPage = JMap.getObj(jMod, topKeys[pi])
+                            if (jPage > 0)
+                                totalKeys += JMap.count(jPage)
+                            endif
+                            pi += 1
+                        endwhile
+                        SetTextOptionValue(_editKeyCountOpt, totalKeys as string)
+                    else
+                        _editPageList = None
+                        _editKeyList = topKeys
+                        _editOptionIds = None
+                        int keyCountVal = 0
+                        if (topKeys != None)
+                            keyCountVal = topKeys.Length
+                        endif
+                        SetTextOptionValue(_editKeyCountOpt, keyCountVal as string)
+                    endif
                 else
+                    _editIsNested = false
                     _editKeyList = None
+                    _editPageList = None
+                    _editOptionIds = None
                     SetTextOptionValue(_editKeyCountOpt, "0")
                 endif
             endif
 
             SetTextOptionValue(_editCurrentValueOpt, "")
+            ForcePageReset()
         endif
     endEvent
 
@@ -1062,11 +1180,92 @@ state EditSelectMod
 endState
 
 
+state EditSelectPage
+    event OnMenuOpenST()
+        if (_editPageList == None || _editPageList.Length == 0)
+            string[] placeholder = new String[1]
+            placeholder[0] = "(select mod first)"
+            SetMenuDialogOptions(placeholder)
+            SetMenuDialogStartIndex(0)
+        else
+            SetMenuDialogOptions(_editPageList)
+            if (_editSelectedPageIdx >= 0)
+                SetMenuDialogStartIndex(_editSelectedPageIdx)
+            else
+                SetMenuDialogStartIndex(0)
+            endif
+        endif
+        SetMenuDialogDefaultIndex(0)
+    endEvent
+
+    event OnMenuAcceptST(int a_index)
+        if (_editPageList == None || _editPageList.Length == 0)
+            return
+        endif
+
+        if (a_index >= 0 && a_index < _editPageList.Length)
+            _editSelectedPageIdx = a_index
+            _editSelectedKeyIdx = -1
+            SetMenuOptionValueST(_editPageList[a_index])
+
+            ; Load options for this page
+            if (_lastImportedBackup > 0 && _editModList != None && _editSelectedModIdx >= 0)
+                int jMod = JMap.getObj(_lastImportedBackup, _editModList[_editSelectedModIdx])
+                if (jMod > 0)
+                    int jPage = JMap.getObj(jMod, _editPageList[a_index])
+                    if (jPage > 0)
+                        string[] optIds = JMap.allKeysPArray(jPage)
+                        int numOpts = 0
+                        if (optIds != None)
+                            numOpts = optIds.Length
+                        endif
+                        _editOptionIds = optIds
+                        ; Build display names from state option or option ID
+                        _editKeyList = Utility.CreateStringArray(numOpts, "")
+                        int oi = 0
+                        while (oi < numOpts)
+                            int jOpt = JMap.getObj(jPage, optIds[oi])
+                            if (jOpt > 0)
+                                string stName = JMap.getStr(jOpt, "stateOption")
+                                if (stName != "")
+                                    _editKeyList[oi] = stName
+                                else
+                                    _editKeyList[oi] = "#" + optIds[oi]
+                                endif
+                            else
+                                _editKeyList[oi] = optIds[oi]
+                            endif
+                            oi += 1
+                        endwhile
+                        SetTextOptionValue(_editKeyCountOpt, numOpts as string)
+                    else
+                        _editKeyList = None
+                        _editOptionIds = None
+                        SetTextOptionValue(_editKeyCountOpt, "0")
+                    endif
+                endif
+            endif
+
+            SetTextOptionValue(_editCurrentValueOpt, "")
+            ForcePageReset()
+        endif
+    endEvent
+
+    event OnHighlightST()
+        SetInfoText("Select a page within the mod's backup data to browse its options.")
+    endEvent
+endState
+
+
 state EditSelectKey
     event OnMenuOpenST()
         if (_editKeyList == None || _editKeyList.Length == 0)
             string[] placeholder = new String[1]
-            placeholder[0] = "(select mod first)"
+            if (_editIsNested && _editSelectedModIdx >= 0 && _editSelectedPageIdx < 0)
+                placeholder[0] = "(select page first)"
+            else
+                placeholder[0] = "(select mod first)"
+            endif
             SetMenuDialogOptions(placeholder)
             SetMenuDialogStartIndex(0)
         else
@@ -1093,7 +1292,14 @@ state EditSelectKey
             if (_lastImportedBackup > 0 && _editModList != None && _editSelectedModIdx >= 0)
                 int jMod = JMap.getObj(_lastImportedBackup, _editModList[_editSelectedModIdx])
                 if (jMod > 0)
-                    string val = ReadValueAsString(jMod, _editKeyList[a_index])
+                    string val = ""
+                    if (_editIsNested && _editPageList != None && _editSelectedPageIdx >= 0 && _editOptionIds != None)
+                        if (a_index < _editOptionIds.Length)
+                            val = ReadNestedOptionValue(jMod, _editPageList[_editSelectedPageIdx], _editOptionIds[a_index])
+                        endif
+                    else
+                        val = ReadValueAsString(jMod, _editKeyList[a_index])
+                    endif
                     SetTextOptionValue(_editCurrentValueOpt, val)
                 endif
             endif
@@ -1158,7 +1364,6 @@ state EditApply
         endif
 
         string modName = _editModList[_editSelectedModIdx]
-        string keyName = _editKeyList[_editSelectedKeyIdx]
 
         int jBackup = _lastImportedBackup
         if (jBackup == 0)
@@ -1172,12 +1377,24 @@ state EditApply
             return
         endif
 
-        SetTypedValue(jMod, keyName, _editNewValue, _editType)
+        string newDisplayVal = ""
+        if (_editIsNested)
+            if (_editPageList == None || _editSelectedPageIdx < 0 || _editOptionIds == None)
+                SetTextOptionValueST("Select a page first")
+                return
+            endif
+            string pageName = _editPageList[_editSelectedPageIdx]
+            string optId = _editOptionIds[_editSelectedKeyIdx]
+            WriteNestedOptionValue(jMod, pageName, optId, _editNewValue, _editType)
+            newDisplayVal = ReadNestedOptionValue(jMod, pageName, optId)
+        else
+            string keyName = _editKeyList[_editSelectedKeyIdx]
+            SetTypedValue(jMod, keyName, _editNewValue, _editType)
+            newDisplayVal = ReadValueAsString(jMod, keyName)
+        endif
+
         JValue.writeToFile(jMod, BackupConfig.GetDefaultBackupModDirectory() + modName)
-
-        string newDisplayVal = ReadValueAsString(jMod, keyName)
         SetTextOptionValue(_editCurrentValueOpt, newDisplayVal)
-
         SetTextOptionValueST("Saved!")
     endEvent
 
@@ -1208,6 +1425,10 @@ state EditDeleteMod
             _editSelectedModIdx = -1
             _editSelectedKeyIdx = -1
             _editKeyList = None
+            _editIsNested = false
+            _editPageList = None
+            _editSelectedPageIdx = -1
+            _editOptionIds = None
             SetTextOptionValueST("Deleted!")
             ForcePageReset()
         else
@@ -1235,6 +1456,10 @@ state EditDeleteAll
             _editKeyList = None
             _editSelectedModIdx = -1
             _editSelectedKeyIdx = -1
+            _editIsNested = false
+            _editPageList = None
+            _editSelectedPageIdx = -1
+            _editOptionIds = None
             SetTextOptionValueST("All deleted!")
             ForcePageReset()
         else

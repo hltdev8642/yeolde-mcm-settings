@@ -64,7 +64,7 @@ function begin_waiting()
         if (_thread1.queued() || _thread2.queued() || _thread3.queued() || _thread4.queued() || _thread5.queued() || _thread6.queued())
             i += 1
             Utility.WaitMenuMode(0.1)
-            if (i > 100) ; TODO: Wait in gametime instead of a simple loop count.
+            if (i > 600)
                 debug.Trace("Error: A catastrophic error has occurred. All threads have become unresponsive. Please debug this issue or notify the author.")
                 if (_thread1.queued())
                     _thread1.forceBackUnlock()
