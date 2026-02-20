@@ -78,12 +78,6 @@ event OnVersionUpdate(int a_version)
     endif
 endEvent
 
-; Called every time the player navigates to this MCM panel.
-; Guarantees Pages is always correct regardless of save-game state.
-event OnConfigOpen()
-    EnsurePages()
-endEvent
-
 ; @implements SKI_QuestBase
 event OnGameReload()
     parent.OnGameReload()
