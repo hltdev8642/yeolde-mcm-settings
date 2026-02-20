@@ -1,1 +1,0 @@
-scriptname YeOldeBackupThread6 extends YeOldeBackupThread

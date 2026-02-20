@@ -61,9 +61,9 @@ string property COLOR_BACKUP_UNKNOWN = "#DDDDDD" autoreadonly hidden
 ; INITIALIZATION
 ; ============================================================================
 
-; Version 2 = v2 feature update (slots, per-mod, search, edit UX overhaul)
+; Version 4 = Force re-init of Pages/slots on all existing saves; OnConfigOpen guard
 int function GetVersion()
-    return 2
+    return 4
 endFunction
 
 ; @overrides SKI_ConfigBase
@@ -78,10 +78,41 @@ event OnVersionUpdate(int a_version)
     endif
 endEvent
 
+; Called every time the player navigates to this MCM panel.
+; Guarantees Pages is always correct regardless of save-game state.
+event OnConfigOpen()
+    EnsurePages()
+endEvent
+
 ; @implements SKI_QuestBase
 event OnGameReload()
     parent.OnGameReload()
+    EnsurePages()
+
+    ; Ensure slot display names are initialized and reflect current slot files.
+    if (_slotDisplayNames == None || _slotDisplayNames.Length != 5)
+        _slotDisplayNames = new String[5]
+        _slotDisplayNames[0] = "Slot 1 (empty)"
+        _slotDisplayNames[1] = "Slot 2 (empty)"
+        _slotDisplayNames[2] = "Slot 3 (empty)"
+        _slotDisplayNames[3] = "Slot 4 (empty)"
+        _slotDisplayNames[4] = "Slot 5 (empty)"
+    endif
+    RefreshSlotNames()
 endEvent
+
+; Ensure all 5 MCM tabs are registered, including "Edit Backups".
+; Called from OnConfigOpen and OnGameReload so the tab is always visible.
+function EnsurePages()
+    if (Pages == None || Pages.Length != 5 || Pages[4] != "Edit Backups")
+        Pages = new String[5]
+        Pages[0] = "Show/hide menus"
+        Pages[1] = "Backup/Restore menus"
+        Pages[2] = "Backup Mod selection"
+        Pages[3] = "Debugging options"
+        Pages[4] = "Edit Backups"
+    endif
+endFunction
 
 ; Shared init logic used by both OnConfigInit and OnVersionUpdate
 function InitializeVariables()
@@ -994,6 +1025,15 @@ state PerModBackup
             SetTextOptionValueST("working...")
             ClearSkippedModList()
             ConfigManager.BackupSingleMod(modName, self)
+
+            ; Update the active slot so it reflects the freshly backed-up mod data.
+            string slotName = BackupConfig.GetSlotName(_selectedSlotIndex)
+            if (slotName == "<Empty>" || slotName == "<No Name>")
+                slotName = "Slot " + (_selectedSlotIndex + 1)
+            endif
+            BackupConfig.SaveActiveToSlot(_selectedSlotIndex, slotName)
+            RefreshSlotNames()
+
             SetTextOptionValueST("Done!")
         else
             SetTextOptionValueST("Press")
@@ -1527,14 +1567,26 @@ state EditQuickApply
             _lastImportedBackup = jBackup
         endif
 
-        int jMod = JMap.getObj(jBackup, modName)
+        ; Keys in the imported backup include the .json extension (from readFromDirectory).
+        ; Normalise so the quick-edit input (which omits the extension) still finds the right entry.
+        string lookupName = modName
+        if (JMap.getObj(jBackup, modName) == 0 && StringUtil.Find(modName, ".json") < 0)
+            lookupName = modName + ".json"
+        endif
+
+        int jMod = JMap.getObj(jBackup, lookupName)
         if (jMod == 0)
             jMod = JMap.object()
-            JMap.setObj(jBackup, modName, jMod)
+            JMap.setObj(jBackup, lookupName, jMod)
         endif
 
         SetTypedValue(jMod, keyName, newVal, _editType)
-        JValue.writeToFile(jMod, BackupConfig.GetDefaultBackupModDirectory() + modName)
+        ; Ensure the saved file always has the .json extension.
+        string savePath = lookupName
+        if (StringUtil.Find(savePath, ".json") < 0)
+            savePath = savePath + ".json"
+        endif
+        JValue.writeToFile(jMod, BackupConfig.GetDefaultBackupModDirectory() + savePath)
 
         SetTextOptionValueST("Saved to " + modName)
     endEvent
