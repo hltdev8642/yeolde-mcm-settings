@@ -337,25 +337,21 @@ event OnPageReset(string a_page)
         return
     endif
 
-    Debug.Trace(self + ": " + _modNames.Length + " mods, building '" + a_page + "'")
-
-    int jModNames = JArray.objectWithStrings(_modNames)
-    string[] sortedModNames
-    if (jModNames > 0)
-        JArray.unique(jModNames)
-        int emptyIndex = JArray.findStr(jModNames, "")
-        if (emptyIndex >= 0)
-            JArray.eraseIndex(jModNames, emptyIndex)
+    ; Build compact mod list directly from _modNames, capturing real indices.
+    ; Iterating _modNames directly avoids JContainers and eliminates Find() re-lookups in render loops.
+    string[] sortedModNames = Utility.CreateStringArray(128, "")
+    int[] sortedIndices = Utility.CreateIntArray(128, -1)
+    int nbMods = 0
+    int nmIdx = 0
+    while (nmIdx < _modNames.Length)
+        if (_modNames[nmIdx] != "")
+            sortedModNames[nbMods] = _modNames[nmIdx]
+            sortedIndices[nbMods] = nmIdx
+            nbMods += 1
         endif
-        sortedModNames = JArray.asStringArray(jModNames)
-    endif
-
-    ; Fallback: if JContainers failed or the array collapsed, use the raw mod list
-    if (sortedModNames == None || sortedModNames.Length == 0)
-        Debug.Trace(self + ": JArray processing failed (handle=" + jModNames + "), using raw mod list")
-        sortedModNames = _modNames
-    endif
-    int nbMods = sortedModNames.Length
+        nmIdx += 1
+    endwhile
+    Debug.Trace(self + ": " + nbMods + " registered mods, building '" + a_page + "'")
     if a_page == "Show/hide menus"
 
         ;; Search filter + headers
@@ -363,19 +359,15 @@ event OnPageReset(string a_page)
         AddInputOptionST("ModSearchFilter", "Search mods:", _modSearchFilter, 0)
         AddHeaderOption("Available MCM Menus")
 
-        ;; Build filtered mod list
+        ;; Build filtered mod list, capturing pre-resolved indices alongside names
         int filteredCount = 0
         string[] filteredMods = Utility.CreateStringArray(128, "")
+        int[] filteredIndices = Utility.CreateIntArray(128, -1)
         int fi = 0
         while (fi < nbMods)
-            bool matchFilter = false
-            if (_modSearchFilter == "")
-                matchFilter = true
-            elseif (StringUtil.Find(sortedModNames[fi], _modSearchFilter) >= 0)
-                matchFilter = true
-            endif
-            if (matchFilter)
+            if (_modSearchFilter == "" || StringUtil.Find(sortedModNames[fi], _modSearchFilter) >= 0)
                 filteredMods[filteredCount] = sortedModNames[fi]
+                filteredIndices[filteredCount] = sortedIndices[fi]
                 filteredCount += 1
             endif
             fi += 1
@@ -384,14 +376,12 @@ event OnPageReset(string a_page)
         ;; 1st column: first half of filtered mods
         int i = 0
         while (i < filteredCount / 2)
-            int modIndex = _modNames.Find(filteredMods[i])
-            if (modIndex > -1)
-                int flag = OPTION_FLAG_NONE
-                if (_modNames[modIndex] == self.ModName)
-                    flag = OPTION_FLAG_DISABLED
-                endif
-                _modMenuToggle[modIndex] = AddToggleOption(_modNames[modIndex], _modEnableFlags[modIndex], flag)
+            int modIndex = filteredIndices[i]
+            int flag = OPTION_FLAG_NONE
+            if (_modNames[modIndex] == self.ModName)
+                flag = OPTION_FLAG_DISABLED
             endif
+            _modMenuToggle[modIndex] = AddToggleOption(_modNames[modIndex], _modEnableFlags[modIndex], flag)
             i += 1
         endwhile
 
@@ -401,14 +391,12 @@ event OnPageReset(string a_page)
         AddHeaderOption("")
 
         while (i < filteredCount)
-            int modIndex = _modNames.Find(filteredMods[i])
-            if (modIndex > -1)
-                int flag = OPTION_FLAG_NONE
-                if (_modNames[modIndex] == self.ModName)
-                    flag = OPTION_FLAG_DISABLED
-                endif
-                _modMenuToggle[modIndex] = AddToggleOption(_modNames[modIndex], _modEnableFlags[modIndex], flag)
+            int modIndex = filteredIndices[i]
+            int flag = OPTION_FLAG_NONE
+            if (_modNames[modIndex] == self.ModName)
+                flag = OPTION_FLAG_DISABLED
             endif
+            _modMenuToggle[modIndex] = AddToggleOption(_modNames[modIndex], _modEnableFlags[modIndex], flag)
             i += 1
         endwhile
 
@@ -454,7 +442,12 @@ event OnPageReset(string a_page)
             AddHeaderOption("Per-Mod Backup/Restore")
             AddHeaderOption("")
 
-            _perModNames = sortedModNames
+            _perModNames = Utility.CreateStringArray(nbMods, "")
+            int pnIdx = 0
+            while (pnIdx < nbMods)
+                _perModNames[pnIdx] = sortedModNames[pnIdx]
+                pnIdx += 1
+            endwhile
             string perModDisplay = "(none)"
             if (_perModSelectedIdx >= 0 && _perModSelectedIdx < _perModNames.Length)
                 perModDisplay = _perModNames[_perModSelectedIdx]
@@ -500,8 +493,8 @@ event OnPageReset(string a_page)
         AddHeaderOption("Backup Selection")
 
         int i = 0
-        while (i < sortedModNames.Length / 2)
-            int modIndex = _modNames.Find(sortedModNames[i])
+        while (i < nbMods / 2)
+            int modIndex = sortedIndices[i]
             string color = COLOR_BACKUP_UNKNOWN
             if (modIndex > -1)
                 if (YeOldeConfig.isModNeedPatch(jConfig, _modNames[modIndex]))
@@ -533,8 +526,8 @@ event OnPageReset(string a_page)
         AddTextOption("      | <font color='" + COLOR_BACKUP_PATCH_NEEDED + "'>Patch available</font> | <font color='" + COLOR_BACKUP_PATCH_OK + "'>Mod OK</font> | <font color='" + COLOR_BACKUP_FAIL + "'>Not compatible</font> |", "")
         AddHeaderOption("")
 
-        while (i < sortedModNames.Length)
-            int modIndex = _modNames.Find(sortedModNames[i])
+        while (i < nbMods)
+            int modIndex = sortedIndices[i]
             string color = COLOR_BACKUP_UNKNOWN
             if (modIndex > -1)
                 if (YeOldeConfig.isModNeedPatch(jConfig, _modNames[modIndex]))
