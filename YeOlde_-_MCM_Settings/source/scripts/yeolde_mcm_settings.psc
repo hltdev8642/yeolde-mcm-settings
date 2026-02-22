@@ -87,15 +87,6 @@ event OnGameReload()
     EnsurePages()
     EnsureCriticalArrays()
 
-    ; Ensure slot display names are initialized.
-    if (_slotDisplayNames == None || _slotDisplayNames.Length != 5)
-        _slotDisplayNames = new String[5]
-        _slotDisplayNames[0] = "Slot 1 (empty)"
-        _slotDisplayNames[1] = "Slot 2 (empty)"
-        _slotDisplayNames[2] = "Slot 3 (empty)"
-        _slotDisplayNames[3] = "Slot 4 (empty)"
-        _slotDisplayNames[4] = "Slot 5 (empty)"
-    endif
     Debug.Trace(self + ": OnGameReload() DONE")
 endEvent
 
@@ -121,52 +112,36 @@ endFunction
 ; Guarantee all working arrays exist. Prevents None-array crashes if
 ; InitializeVariables() was skipped (same version) or save data was lost.
 function EnsureCriticalArrays()
-    if (_modMenuToggle == None || _modMenuToggle.Length != 128)
-        _modMenuToggle = Utility.CreateIntArray(128, 0)
+    ; Split None/Length checks into if/elseIf to avoid non-short-circuit || crashes on corrupted saves.
+    ; Use literal new Int[]/Bool[] instead of Utility.CreateIntArray/BoolArray (SKSE-independent).
+    if (_modMenuToggle == None)
+        _modMenuToggle = new Int[128]
+    elseIf (_modMenuToggle.Length != 128)
+        _modMenuToggle = new Int[128]
     endif
-    if (_modBlacklistToggle == None || _modBlacklistToggle.Length != 128)
-        _modBlacklistToggle = Utility.CreateIntArray(128, 0)
+    if (_modBlacklistToggle == None)
+        _modBlacklistToggle = new Int[128]
+    elseIf (_modBlacklistToggle.Length != 128)
+        _modBlacklistToggle = new Int[128]
     endif
-    if (_modBlacklistEnableFlags == None || _modBlacklistEnableFlags.Length != 128)
-        _modBlacklistEnableFlags = Utility.CreateBoolArray(128)
+    if (_modBlacklistEnableFlags == None)
+        _modBlacklistEnableFlags = new Bool[128]
+    elseIf (_modBlacklistEnableFlags.Length != 128)
+        _modBlacklistEnableFlags = new Bool[128]
     endif
-    if (_editTypeNames == None || _editTypeNames.Length != 4)
-        _editTypeNames = new String[4]
-        _editTypeNames[0] = "String"
-        _editTypeNames[1] = "Int"
-        _editTypeNames[2] = "Float"
-        _editTypeNames[3] = "Bool"
-    endif
-    if (_slotDisplayNames == None || _slotDisplayNames.Length != 5)
-        _slotDisplayNames = new String[5]
-        _slotDisplayNames[0] = "Slot 1 (empty)"
-        _slotDisplayNames[1] = "Slot 2 (empty)"
-        _slotDisplayNames[2] = "Slot 3 (empty)"
-        _slotDisplayNames[3] = "Slot 4 (empty)"
-        _slotDisplayNames[4] = "Slot 5 (empty)"
-    endif
+    ; _editTypeNames: computed live via GetEditTypeName() — avoids save-type corruption.
+    ; _slotDisplayNames: computed live via ComputeSlotDisplayName() — avoids save-type corruption.
 endFunction
 
 ; Shared init logic used by both OnConfigInit and OnVersionUpdate
 function InitializeVariables()
-    _modMenuToggle = Utility.CreateIntArray(128, 0)
-    _modBlacklistToggle = Utility.CreateIntArray(128, 0)
-    _modBlacklistEnableFlags = Utility.CreateBoolArray(128)
+    _modMenuToggle = new Int[128]
+    _modBlacklistToggle = new Int[128]
+    _modBlacklistEnableFlags = new Bool[128]
     _modMenuBackupInfosIndex = 0
 
-    _editTypeNames = new String[4]
-    _editTypeNames[0] = "String"
-    _editTypeNames[1] = "Int"
-    _editTypeNames[2] = "Float"
-    _editTypeNames[3] = "Bool"
-
-    _slotDisplayNames = new String[5]
-    _slotDisplayNames[0] = "Slot 1 (empty)"
-    _slotDisplayNames[1] = "Slot 2 (empty)"
-    _slotDisplayNames[2] = "Slot 3 (empty)"
-    _slotDisplayNames[3] = "Slot 4 (empty)"
-    _slotDisplayNames[4] = "Slot 5 (empty)"
-
+    ; _editTypeNames: computed live via GetEditTypeName() — not stored in save.
+    ; _slotDisplayNames: computed live via ComputeSlotDisplayName() — not stored in save.
     _selectedSlotIndex = 0
     _editSelectedModIdx = -1
     _editSelectedKeyIdx = -1
@@ -268,36 +243,43 @@ function WriteNestedOptionValue(int jMod, string pageName, string optId, string 
     endif
 endfunction
 
-; Refresh slot display names from disk
+; no-op: slot names now computed live via ComputeSlotDisplayName().
+; Kept as a stub so existing call sites compile without changes.
 function RefreshSlotNames()
-    if (_slotDisplayNames == None || _slotDisplayNames.Length != 5)
-        _slotDisplayNames = new String[5]
-        _slotDisplayNames[0] = "Slot 1 (empty)"
-        _slotDisplayNames[1] = "Slot 2 (empty)"
-        _slotDisplayNames[2] = "Slot 3 (empty)"
-        _slotDisplayNames[3] = "Slot 4 (empty)"
-        _slotDisplayNames[4] = "Slot 5 (empty)"
-    endif
-    int i = 0
-    while (i < 5)
-        string name = BackupConfig.GetSlotName(i)
-        string ts = BackupConfig.GetSlotTimestamp(i)
-        if (name == "<Empty>")
-            _slotDisplayNames[i] = "Slot " + (i + 1) + " (empty)"
-        else
-            int mCount = BackupConfig.GetSlotModCount(i)
-            string label = name
-            if (mCount > 0)
-                label += " (" + mCount + " mods)"
-            endif
-            if (ts != "")
-                label += " [" + ts + "]"
-            endif
-            _slotDisplayNames[i] = label
-        endif
-        i += 1
-    endwhile
 endfunction
+
+; Compute one slot's display label directly from disk.
+; Immune to save-game type corruption on _slotDisplayNames.
+string function ComputeSlotDisplayName(int idx)
+    string name = BackupConfig.GetSlotName(idx)
+    if (name == "<Empty>")
+        return "Slot " + (idx + 1) + " (empty)"
+    endif
+    int mCount = BackupConfig.GetSlotModCount(idx)
+    string label = name
+    if (mCount > 0)
+        label += " (" + mCount + " mods)"
+    endif
+    string ts = BackupConfig.GetSlotTimestamp(idx)
+    if (ts != "")
+        label += " [" + ts + "]"
+    endif
+    return label
+endFunction
+
+; Return display name for edit value type by index.
+; 0=String, 1=Int, 2=Float, 3=Bool. Hard-coded to avoid _editTypeNames save corruption.
+string function GetEditTypeName(int idx)
+    if (idx == 1)
+        return "Int"
+    elseif (idx == 2)
+        return "Float"
+    elseif (idx == 3)
+        return "Bool"
+    else
+        return "String"
+    endif
+endFunction
 
 
 ; @implements SKI_ConfigBase
@@ -423,8 +405,7 @@ event OnPageReset(string a_page)
             AddHeaderOption("Backup Slots")
             AddHeaderOption("")
 
-            RefreshSlotNames()
-            AddMenuOptionST("SlotSelector", "Active Slot", _slotDisplayNames[_selectedSlotIndex])
+            AddMenuOptionST("SlotSelector", "Active Slot", ComputeSlotDisplayName(_selectedSlotIndex))
             string slotTs = BackupConfig.GetSlotTimestamp(_selectedSlotIndex)
             if (slotTs == "")
                 slotTs = "(no backup)"
@@ -631,7 +612,7 @@ event OnPageReset(string a_page)
         AddHeaderOption("Actions")
 
         ; Row 7: Value type dropdown + delete mod button
-        AddMenuOptionST("EditValueType", "Value Type", _editTypeNames[_editType])
+        AddMenuOptionST("EditValueType", "Value Type", GetEditTypeName(_editType))
         AddTextOptionST("EditDeleteMod", "Delete Mod Backup", "Press")
 
         ; Row 8: New value input + delete all button
@@ -970,8 +951,13 @@ endState
 
 state SlotSelector
     event OnMenuOpenST()
-        RefreshSlotNames()
-        SetMenuDialogOptions(_slotDisplayNames)
+        string[] names = new String[5]
+        int i = 0
+        while (i < 5)
+            names[i] = ComputeSlotDisplayName(i)
+            i += 1
+        endwhile
+        SetMenuDialogOptions(names)
         SetMenuDialogStartIndex(_selectedSlotIndex)
         SetMenuDialogDefaultIndex(0)
     endEvent
@@ -979,7 +965,7 @@ state SlotSelector
     event OnMenuAcceptST(int a_index)
         if (a_index >= 0 && a_index < 5)
             _selectedSlotIndex = a_index
-            SetMenuOptionValueST(_slotDisplayNames[a_index])
+            SetMenuOptionValueST(ComputeSlotDisplayName(a_index))
             ForcePageReset()
         endif
     endEvent
@@ -1462,7 +1448,12 @@ endState
 
 state EditValueType
     event OnMenuOpenST()
-        SetMenuDialogOptions(_editTypeNames)
+        string[] typeNames = new String[4]
+        typeNames[0] = "String"
+        typeNames[1] = "Int"
+        typeNames[2] = "Float"
+        typeNames[3] = "Bool"
+        SetMenuDialogOptions(typeNames)
         SetMenuDialogStartIndex(_editType)
         SetMenuDialogDefaultIndex(0)
     endEvent
@@ -1470,7 +1461,7 @@ state EditValueType
     event OnMenuAcceptST(int a_index)
         if (a_index >= 0 && a_index < 4)
             _editType = a_index
-            SetMenuOptionValueST(_editTypeNames[a_index])
+            SetMenuOptionValueST(GetEditTypeName(a_index))
         endif
     endEvent
 
