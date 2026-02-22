@@ -81,12 +81,12 @@ endfunction
 ; Load a slot file to the active mods/ directory for restore
 function LoadSlotToActive(int slotIndex) global
     string slotPath = GetSlotFilePath(slotIndex)
-    int jSlot = JValue.readFromFile(slotPath)
-    if (jSlot == 0)
+    if (!JContainers.fileExistsAtPath(slotPath))
         Log("LoadSlotToActive() -> Slot file not found: " + slotPath)
         return
     endif
 
+    int jSlot = JValue.readFromFile(slotPath)
     if (jSlot == 0)
         Log("LoadSlotToActive() -> Failed to read slot file")
         return
@@ -116,6 +116,10 @@ endfunction
 ; Get the display name for a slot
 string function GetSlotName(int slotIndex) global
     string slotPath = GetSlotFilePath(slotIndex)
+    if (!JContainers.fileExistsAtPath(slotPath))
+        return "<Empty>"
+    endif
+
     int jSlot = JValue.readFromFile(slotPath)
     if (jSlot == 0)
         return "<Empty>"
@@ -138,6 +142,10 @@ endfunction
 ; Get the timestamp for a slot
 string function GetSlotTimestamp(int slotIndex) global
     string slotPath = GetSlotFilePath(slotIndex)
+    if (!JContainers.fileExistsAtPath(slotPath))
+        return ""
+    endif
+
     int jSlot = JValue.readFromFile(slotPath)
     if (jSlot == 0)
         return ""
@@ -157,6 +165,10 @@ endfunction
 ; Get number of mods in a slot
 int function GetSlotModCount(int slotIndex) global
     string slotPath = GetSlotFilePath(slotIndex)
+    if (!JContainers.fileExistsAtPath(slotPath))
+        return 0
+    endif
+
     int jSlot = JValue.readFromFile(slotPath)
     if (jSlot == 0)
         return 0

@@ -61,18 +61,20 @@ string property COLOR_BACKUP_UNKNOWN = "#DDDDDD" autoreadonly hidden
 ; INITIALIZATION
 ; ============================================================================
 
-; Version 4 = Force re-init of Pages/slots on all existing saves; OnConfigOpen guard
+; Version 7 = v12: bypass corrupted Pages property via GetPageNames()
 int function GetVersion()
-    return 4
+    return 7
 endFunction
 
 ; @overrides SKI_ConfigBase
 event OnConfigInit()
+    Debug.Trace(self + ": OnConfigInit()")
     InitializeVariables()
 endEvent
 
 ; Called automatically when GetVersion() returns a higher number than saved
 event OnVersionUpdate(int a_version)
+    Debug.Trace(self + ": OnVersionUpdate(" + a_version + ")")
     if (a_version >= 2)
         InitializeVariables()
     endif
@@ -80,10 +82,12 @@ endEvent
 
 ; @implements SKI_QuestBase
 event OnGameReload()
+    Debug.Trace(self + ": OnGameReload() START")
     parent.OnGameReload()
     EnsurePages()
+    EnsureCriticalArrays()
 
-    ; Ensure slot display names are initialized and reflect current slot files.
+    ; Ensure slot display names are initialized.
     if (_slotDisplayNames == None || _slotDisplayNames.Length != 5)
         _slotDisplayNames = new String[5]
         _slotDisplayNames[0] = "Slot 1 (empty)"
@@ -92,19 +96,54 @@ event OnGameReload()
         _slotDisplayNames[3] = "Slot 4 (empty)"
         _slotDisplayNames[4] = "Slot 5 (empty)"
     endif
-    RefreshSlotNames()
+    Debug.Trace(self + ": OnGameReload() DONE")
 endEvent
 
-; Ensure all 5 MCM tabs are registered, including "Edit Backups".
-; Called from OnConfigOpen and OnGameReload so the tab is always visible.
+; Pages are now supplied via GetPageNames() override in OpenConfig().
+; The Pages auto property is not written to — it can be corrupted in saves
+; when the parent script's variable layout changes between versions.
 function EnsurePages()
-    if (Pages == None || Pages.Length != 5 || Pages[4] != "Edit Backups")
-        Pages = new String[5]
-        Pages[0] = "Show/hide menus"
-        Pages[1] = "Backup/Restore menus"
-        Pages[2] = "Backup Mod selection"
-        Pages[3] = "Debugging options"
-        Pages[4] = "Edit Backups"
+    ; no-op: GetPageNames() supplies page names directly to OpenConfig()
+endFunction
+
+; Override parent virtual to supply page names without writing to the
+; Pages auto property, which avoids save-game variable corruption.
+string[] function GetPageNames()
+    string[] p = new String[5]
+    p[0] = "Show/hide menus"
+    p[1] = "Backup/Restore menus"
+    p[2] = "Backup Mod selection"
+    p[3] = "Debugging options"
+    p[4] = "Edit Backups"
+    return p
+endFunction
+
+; Guarantee all working arrays exist. Prevents None-array crashes if
+; InitializeVariables() was skipped (same version) or save data was lost.
+function EnsureCriticalArrays()
+    if (_modMenuToggle == None || _modMenuToggle.Length != 128)
+        _modMenuToggle = Utility.CreateIntArray(128, 0)
+    endif
+    if (_modBlacklistToggle == None || _modBlacklistToggle.Length != 128)
+        _modBlacklistToggle = Utility.CreateIntArray(128, 0)
+    endif
+    if (_modBlacklistEnableFlags == None || _modBlacklistEnableFlags.Length != 128)
+        _modBlacklistEnableFlags = Utility.CreateBoolArray(128)
+    endif
+    if (_editTypeNames == None || _editTypeNames.Length != 4)
+        _editTypeNames = new String[4]
+        _editTypeNames[0] = "String"
+        _editTypeNames[1] = "Int"
+        _editTypeNames[2] = "Float"
+        _editTypeNames[3] = "Bool"
+    endif
+    if (_slotDisplayNames == None || _slotDisplayNames.Length != 5)
+        _slotDisplayNames = new String[5]
+        _slotDisplayNames[0] = "Slot 1 (empty)"
+        _slotDisplayNames[1] = "Slot 2 (empty)"
+        _slotDisplayNames[2] = "Slot 3 (empty)"
+        _slotDisplayNames[3] = "Slot 4 (empty)"
+        _slotDisplayNames[4] = "Slot 5 (empty)"
     endif
 endFunction
 
@@ -141,12 +180,7 @@ function InitializeVariables()
     _editType = 0
     _lastEditRaw = ""
 
-    Pages = new String[5]
-    Pages[0] = "Show/hide menus"
-    Pages[1] = "Backup/Restore menus"
-    Pages[2] = "Backup Mod selection"
-    Pages[3] = "Debugging options"
-    Pages[4] = "Edit Backups"
+    ; Pages are set via GetPageNames() override — do not write to Pages property.
 endFunction
 
 
@@ -236,6 +270,14 @@ endfunction
 
 ; Refresh slot display names from disk
 function RefreshSlotNames()
+    if (_slotDisplayNames == None || _slotDisplayNames.Length != 5)
+        _slotDisplayNames = new String[5]
+        _slotDisplayNames[0] = "Slot 1 (empty)"
+        _slotDisplayNames[1] = "Slot 2 (empty)"
+        _slotDisplayNames[2] = "Slot 3 (empty)"
+        _slotDisplayNames[3] = "Slot 4 (empty)"
+        _slotDisplayNames[4] = "Slot 5 (empty)"
+    endif
     int i = 0
     while (i < 5)
         string name = BackupConfig.GetSlotName(i)
@@ -243,11 +285,15 @@ function RefreshSlotNames()
         if (name == "<Empty>")
             _slotDisplayNames[i] = "Slot " + (i + 1) + " (empty)"
         else
-            if (ts != "")
-                _slotDisplayNames[i] = name + " [" + ts + "]"
-            else
-                _slotDisplayNames[i] = name
+            int mCount = BackupConfig.GetSlotModCount(i)
+            string label = name
+            if (mCount > 0)
+                label += " (" + mCount + " mods)"
             endif
+            if (ts != "")
+                label += " [" + ts + "]"
+            endif
+            _slotDisplayNames[i] = label
         endif
         i += 1
     endwhile
@@ -257,6 +303,12 @@ endfunction
 ; @implements SKI_ConfigBase
 event OnPageReset(string a_page)
 	{Called when a new page is selected, including the initial empty page}
+    Debug.Trace(self + ": OnPageReset('" + a_page + "')")
+
+    ; Guarantee all 5 tabs are registered before SKI pushes Pages to the UI.
+    ; OpenConfig() calls OnPageReset("") BEFORE .setPageNames(Pages), so this
+    ; is the correct timing to fix a stale Pages array from an older save.
+    EnsurePages()
 
     if a_page == ""
 		self.LoadCustomContent("yeolde/settings_splash.dds", 0.000000, 0.000000)
@@ -264,15 +316,45 @@ event OnPageReset(string a_page)
     endIf
 
     self.UnloadCustomContent()
+
+    ; Guarantee all working arrays exist before any page logic.
+    EnsureCriticalArrays()
+
+    ; Safety: if ConfigManager isn't ready yet, show a wait message
+    if (ConfigManager == None)
+        Debug.Trace(self + ": ConfigManager is None")
+        AddHeaderOption("MCM is still loading...")
+        AddTextOption("Please close and reopen MCM.", "")
+        return
+    endif
+
     _modNames = ConfigManager.GetAllModNames()
     _modEnableFlags = ConfigManager.GetAllEnabledModFlags()
 
-    int jModNames = JArray.objectWithStrings(_modNames)
-    JArray.unique(jModNames)
-    int emptyIndex = JArray.findStr(jModNames, "")
-    JArray.eraseIndex(jModNames, emptyIndex) ; Remove the string ""
+    if (_modNames == None || _modNames.Length == 0)
+        Debug.Trace(self + ": No mods from ConfigManager")
+        AddHeaderOption("No MCM mods detected")
+        return
+    endif
 
-    string[] sortedModNames = JArray.asStringArray(jModNames)
+    Debug.Trace(self + ": " + _modNames.Length + " mods, building '" + a_page + "'")
+
+    int jModNames = JArray.objectWithStrings(_modNames)
+    string[] sortedModNames
+    if (jModNames > 0)
+        JArray.unique(jModNames)
+        int emptyIndex = JArray.findStr(jModNames, "")
+        if (emptyIndex >= 0)
+            JArray.eraseIndex(jModNames, emptyIndex)
+        endif
+        sortedModNames = JArray.asStringArray(jModNames)
+    endif
+
+    ; Fallback: if JContainers failed or the array collapsed, use the raw mod list
+    if (sortedModNames == None || sortedModNames.Length == 0)
+        Debug.Trace(self + ": JArray processing failed (handle=" + jModNames + "), using raw mod list")
+        sortedModNames = _modNames
+    endif
     int nbMods = sortedModNames.Length
     if a_page == "Show/hide menus"
 
@@ -363,6 +445,10 @@ event OnPageReset(string a_page)
 
             AddInputOptionST("SlotNameInput", "Rename Slot", BackupConfig.GetSlotName(_selectedSlotIndex), 0)
             AddTextOptionST("DeleteSlot", "Delete Slot", "Press")
+
+            AddTextOptionST("LoadSlot", "Load Slot for Restore", "Press")
+            int slotModCount = BackupConfig.GetSlotModCount(_selectedSlotIndex)
+            AddTextOption("Mods in Slot", slotModCount as string)
 
             ; Per-Mod Section (Feature 6)
             AddHeaderOption("Per-Mod Backup/Restore")
@@ -809,7 +895,7 @@ state ImportMCMValues
 	endEvent
 
 	event OnHighlightST()
-		SetInfoText("Press the button and wait until it's completed (a message will show).")
+		SetInfoText("Restore all configs from the active backup. Use 'Load Slot' first to restore from a specific slot.")
 	endEvent
 endState
 
@@ -901,6 +987,7 @@ state SlotSelector
         if (a_index >= 0 && a_index < 5)
             _selectedSlotIndex = a_index
             SetMenuOptionValueST(_slotDisplayNames[a_index])
+            ForcePageReset()
         endif
     endEvent
 
@@ -932,8 +1019,12 @@ state SlotNameInput
                 JMap.setStr(jMeta, "name", a_input)
                 JValue.writeToFile(jSlot, slotPath)
                 JValue.release(jSlot)
+                SetInputOptionValueST(a_input, false, "")
+                RefreshSlotNames()
+                ForcePageReset()
+            else
+                SetInputOptionValueST("(slot empty)", false, "")
             endif
-            SetInputOptionValueST(a_input, false, "")
         endif
     endEvent
 
@@ -967,6 +1058,36 @@ state DeleteSlot
 
     event OnHighlightST()
         SetInfoText("Delete the currently selected backup slot permanently.")
+    endEvent
+endState
+
+
+state LoadSlot
+    event OnSelectST()
+        string slotName = BackupConfig.GetSlotName(_selectedSlotIndex)
+        if (slotName == "<Empty>")
+            SetTextOptionValueST("Slot is empty")
+            return
+        endif
+
+        bool doContinue = ShowMessage("Load '" + slotName + "' to active backup? This replaces current backup data.")
+        if (doContinue)
+            SetTextOptionValueST("Loading...")
+            BackupConfig.LoadSlotToActive(_selectedSlotIndex)
+            RefreshSlotNames()
+            SetTextOptionValueST("Loaded!")
+            ShowMessage("Slot loaded. Use 'Restore all configs' to apply the settings.", false)
+        else
+            SetTextOptionValueST("Press")
+        endif
+    endEvent
+
+    event OnDefaultST()
+        SetTextOptionValueST("Press")
+    endEvent
+
+    event OnHighlightST()
+        SetInfoText("Load this slot's data to the active backup folder. Use 'Restore all configs' afterwards to apply.")
     endEvent
 endState
 
