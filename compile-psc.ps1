@@ -3,6 +3,14 @@ param(
     [switch]$Force
 )
 
+# Delegate to do_compile.bat which has the correct -flags and -import paths
+$batPath = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) 'do_compile.bat'
+if (Test-Path $batPath) {
+    Write-Host "Delegating to do_compile.bat (has correct -f/-i flags)..."
+    cmd /c "`"$batPath`""
+    exit $LASTEXITCODE
+}
+
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 function Resolve-Compiler {

@@ -55,6 +55,10 @@ string property COLOR_BACKUP_PATCH_OK = "#92F1AA" autoreadonly hidden
 string property COLOR_BACKUP_SELF_BACKUP = "#777777" autoreadonly hidden
 string property COLOR_BACKUP_FAIL = "#d45858" autoreadonly hidden
 string property COLOR_BACKUP_UNKNOWN = "#DDDDDD" autoreadonly hidden
+; Flag applied to MCM toggle options for mods excluded from batch backup.
+; Same numeric value as OPTION_FLAG_DISABLED (0x01) — excluded mods are
+; greyed out and unclickable.  Use "Reset Selection to default" to re-include.
+int property OPTION_FLAG_EXCLUDED = 0x01 autoReadonly hidden
 
 
 ; ============================================================================
@@ -112,21 +116,15 @@ endFunction
 ; Guarantee all working arrays exist. Prevents None-array crashes if
 ; InitializeVariables() was skipped (same version) or save data was lost.
 function EnsureCriticalArrays()
-    ; Split None/Length checks into if/elseIf to avoid non-short-circuit || crashes on corrupted saves.
-    ; Use literal new Int[]/Bool[] instead of Utility.CreateIntArray/BoolArray (SKSE-independent).
+    ; None-only checks — avoids .Length access crash on corrupted saves where the variable
+    ; holds a non-None, non-array value (accessing .Length on such a value is fatal in Papyrus).
     if (_modMenuToggle == None)
-        _modMenuToggle = new Int[128]
-    elseIf (_modMenuToggle.Length != 128)
         _modMenuToggle = new Int[128]
     endif
     if (_modBlacklistToggle == None)
         _modBlacklistToggle = new Int[128]
-    elseIf (_modBlacklistToggle.Length != 128)
-        _modBlacklistToggle = new Int[128]
     endif
     if (_modBlacklistEnableFlags == None)
-        _modBlacklistEnableFlags = new Bool[128]
-    elseIf (_modBlacklistEnableFlags.Length != 128)
         _modBlacklistEnableFlags = new Bool[128]
     endif
     ; _editTypeNames: computed live via GetEditTypeName() — avoids save-type corruption.
@@ -334,6 +332,15 @@ event OnPageReset(string a_page)
         nmIdx += 1
     endwhile
     Debug.Trace(self + ": " + nbMods + " registered mods, building '" + a_page + "'")
+    ; Always keep _perModNames fresh so the per-mod selector works on any page.
+    if (nbMods > 0)
+        _perModNames = Utility.CreateStringArray(nbMods, "")
+        int pnFill = 0
+        while (pnFill < nbMods)
+            _perModNames[pnFill] = sortedModNames[pnFill]
+            pnFill += 1
+        endwhile
+    endif
     if a_page == "Show/hide menus"
 
         ;; Search filter + headers
@@ -423,12 +430,6 @@ event OnPageReset(string a_page)
             AddHeaderOption("Per-Mod Backup/Restore")
             AddHeaderOption("")
 
-            _perModNames = Utility.CreateStringArray(nbMods, "")
-            int pnIdx = 0
-            while (pnIdx < nbMods)
-                _perModNames[pnIdx] = sortedModNames[pnIdx]
-                pnIdx += 1
-            endwhile
             string perModDisplay = "(none)"
             if (_perModSelectedIdx >= 0 && _perModSelectedIdx < _perModNames.Length)
                 perModDisplay = _perModNames[_perModSelectedIdx]
@@ -462,10 +463,19 @@ event OnPageReset(string a_page)
         endif
 
         int jModSelection = JValue.readFromFile(YeOldeConfig.GetDefaultModSelectionFilePath())
-
         if (jModSelection == 0)
-            jModSelection = JArray.object()
+            ; No selection file yet — generate the default list (respects yeolde_config.json risk data)
+            ConfigManager.GenerateDefaultModSelectionList()
+            jModSelection = JValue.readFromFile(YeOldeConfig.GetDefaultModSelectionFilePath())
+            if (jModSelection == 0)
+                jModSelection = JArray.object()  ; Fallback: treat all as included
+            endif
         endif
+
+        ;; Uses sortedModNames/sortedIndices already built above (same approach as Show/hide menus).
+        ;; Included mods (in selection list): checked toggle, always clickable (OPTION_FLAG_NONE).
+        ;; Excluded mods (not in list): unchecked toggle, always clickable.
+        ;; Click any toggle to include/exclude. "Reset Selection to default" restores defaults.
 
         ;; 1st column
         SetCursorFillMode(TOP_TO_BOTTOM)
@@ -476,30 +486,10 @@ event OnPageReset(string a_page)
         int i = 0
         while (i < nbMods / 2)
             int modIndex = sortedIndices[i]
-            string color = COLOR_BACKUP_UNKNOWN
-            if (modIndex > -1)
-                if (YeOldeConfig.isModNeedPatch(jConfig, _modNames[modIndex]))
-                    if (ConfigManager.IsBackupRestorePatchActive(_modNames[modIndex], modIndex))
-                        color = COLOR_BACKUP_PATCH_OK
-                    else
-                        color = COLOR_BACKUP_PATCH_NEEDED
-                    endif
-                elseif (YeOldeConfig.isModWillFail(jConfig, _modNames[modIndex]))
-                        color = COLOR_BACKUP_FAIL
-                elseif (YeOldeConfig.isModSelfBackup(jConfig, _modNames[modIndex]))
-                        color = COLOR_BACKUP_SELF_BACKUP
-                elseif (YeOldeConfig.isModOK(jConfig, _modNames[modIndex]) || YeOldeConfig.isModNeedInternalPatch(jConfig, _modNames[modIndex]))
-                        color = COLOR_BACKUP_PATCH_OK
-                endif
-                string name = "<font color='"+ color + "'>" + _modNames[modIndex] + "</font>"
-                _modBlacklistEnableFlags[modIndex] = (JArray.findStr(jModSelection, sortedModNames[i]) > -1)
-                _modBlacklistToggle[modIndex] = AddToggleOption(name, _modBlacklistEnableFlags[modIndex])
-            endif
+            _modBlacklistEnableFlags[modIndex] = (JArray.findStr(jModSelection, _modNames[modIndex]) > -1)
+            _modBlacklistToggle[modIndex] = AddToggleOption(_modNames[modIndex], _modBlacklistEnableFlags[modIndex])
             i += 1
         endwhile
-
-        JValue.release(jModSelection)
-        JValue.zeroLifetime(jModSelection)
 
         ;; 2nd column
         SetCursorPosition(1)
@@ -509,27 +499,13 @@ event OnPageReset(string a_page)
 
         while (i < nbMods)
             int modIndex = sortedIndices[i]
-            string color = COLOR_BACKUP_UNKNOWN
-            if (modIndex > -1)
-                if (YeOldeConfig.isModNeedPatch(jConfig, _modNames[modIndex]))
-                    if (ConfigManager.IsBackupRestorePatchActive(_modNames[modIndex], modIndex))
-                        color = COLOR_BACKUP_PATCH_OK
-                    else
-                        color = COLOR_BACKUP_PATCH_NEEDED
-                    endif
-                elseif (YeOldeConfig.isModWillFail(jConfig, _modNames[modIndex]))
-                        color = COLOR_BACKUP_FAIL
-                elseif (YeOldeConfig.isModSelfBackup(jConfig, _modNames[modIndex]))
-                        color = COLOR_BACKUP_SELF_BACKUP
-                elseif (YeOldeConfig.isModOK(jConfig, _modNames[modIndex]) || YeOldeConfig.isModNeedInternalPatch(jConfig, _modNames[modIndex]))
-                        color = COLOR_BACKUP_PATCH_OK
-                endif
-                string name = "<font color='"+ color + "'>" + _modNames[modIndex] + "</font>"
-                _modBlacklistEnableFlags[modIndex] = (JArray.findStr(jModSelection, sortedModNames[i]) > -1)
-                _modBlacklistToggle[modIndex] = AddToggleOption(name, _modBlacklistEnableFlags[modIndex])
-            endif
+            _modBlacklistEnableFlags[modIndex] = (JArray.findStr(jModSelection, _modNames[modIndex]) > -1)
+            _modBlacklistToggle[modIndex] = AddToggleOption(_modNames[modIndex], _modBlacklistEnableFlags[modIndex])
             i += 1
         endwhile
+
+        JValue.release(jModSelection)
+        JValue.zeroLifetime(jModSelection)
 
     elseif a_page == "Debugging options"
         SetCursorFillMode(TOP_TO_BOTTOM)
@@ -637,7 +613,7 @@ endEvent
 event OnOptionSelect(int a_option)
     {Called when the user selects a non-dialog option}
 
-    if (CurrentPage == Pages[0]) ; "Show/hide menus"
+    if (CurrentPage == "Show/hide menus")
         int i = 0
         while (i<_modMenuToggle.Length)
             if (a_option == _modMenuToggle[i])
@@ -661,32 +637,45 @@ event OnOptionSelect(int a_option)
             i += 1
         endwhile
 
-    elseif (CurrentPage == Pages[2]) ; "Backup blacklist"
+    elseif (CurrentPage == "Backup Mod selection")
         int i = 0
         while (i<_modBlacklistToggle.Length)
             if (a_option == _modBlacklistToggle[i])
-                _modBlacklistEnableFlags[i] = !_modBlacklistEnableFlags[i]
+                ; Toggle inclusion in batch backup.
+                ; If included → click → exclude (remove from list).
+                ; If excluded → click → include (add to list).
+                bool newIncluded = !_modBlacklistEnableFlags[i]
+                _modBlacklistEnableFlags[i] = newIncluded
+                SetToggleOptionValue(a_option, newIncluded)
+
                 int jModSelection = JValue.readFromFile(YeOldeConfig.GetDefaultModSelectionFilePath())
-
                 if (jModSelection == 0)
-                    jModSelection = JArray.object()
-                endif
-
-                if (_modBlacklistEnableFlags[i])
-                    JArray.addStr(jModSelection, _modNames[i])
-                else
-                    int index = JArray.findStr(jModSelection, _modNames[i])
-                    if (index > -1)
-                        JArray.eraseIndex(jModSelection, index)
+                    ; No file yet — generate default so we don't lose all other mods
+                    ConfigManager.GenerateDefaultModSelectionList()
+                    jModSelection = JValue.readFromFile(YeOldeConfig.GetDefaultModSelectionFilePath())
+                    if (jModSelection == 0)
+                        jModSelection = JArray.object()
                     endif
                 endif
 
-		        JArray.sort(jModSelection)
+                if (newIncluded)
+                    ; Re-including: add to list if not already present
+                    if (JArray.findStr(jModSelection, _modNames[i]) == -1)
+                        JArray.addStr(jModSelection, _modNames[i])
+                    endif
+                else
+                    ; Excluding: remove all occurrences
+                    int eraseIdx = JArray.findStr(jModSelection, _modNames[i])
+                    while (eraseIdx > -1)
+                        JArray.eraseIndex(jModSelection, eraseIdx)
+                        eraseIdx = JArray.findStr(jModSelection, _modNames[i])
+                    endwhile
+                endif
+
+                JArray.sort(jModSelection)
                 JValue.writeToFile(jModSelection, YeOldeConfig.GetDefaultModSelectionFilePath())
                 JValue.release(jModSelection)
                 JValue.zeroLifetime(jModSelection)
-
-                SetToggleOptionValue(a_option, _modBlacklistEnableFlags[i])
                 return
             endif
 
@@ -699,7 +688,7 @@ endEvent
 event OnOptionDefault(int a_option)
 	{Called when resetting an option to its default value}
 
-    if (CurrentPage == Pages[0]) ; "Backup blacklist"
+    if (CurrentPage == "Show/hide menus")
         int i = 0
         while (i<_modMenuToggle.Length)
             if (a_option == _modMenuToggle[i])
@@ -716,12 +705,30 @@ event OnOptionDefault(int a_option)
 
             i += 1
         endwhile
-    elseif (CurrentPage == Pages[2]) ; "Backup blacklist"
+    elseif (CurrentPage == "Backup Mod selection")
         int i = 0
         while (i<_modBlacklistToggle.Length)
             if (a_option == _modBlacklistToggle[i])
-                _modBlacklistEnableFlags[i] = false
-                SetToggleOptionValue(a_option, false)
+                ; Default = re-include the mod in batch backup
+                _modBlacklistEnableFlags[i] = true
+                SetToggleOptionValue(a_option, true)
+
+                int jModSelection = JValue.readFromFile(YeOldeConfig.GetDefaultModSelectionFilePath())
+                if (jModSelection == 0)
+                    ; No file yet — generate default before adding this mod
+                    ConfigManager.GenerateDefaultModSelectionList()
+                    jModSelection = JValue.readFromFile(YeOldeConfig.GetDefaultModSelectionFilePath())
+                    if (jModSelection == 0)
+                        jModSelection = JArray.object()
+                    endif
+                endif
+                if (JArray.findStr(jModSelection, _modNames[i]) == -1)
+                    JArray.addStr(jModSelection, _modNames[i])
+                endif
+                JArray.sort(jModSelection)
+                JValue.writeToFile(jModSelection, YeOldeConfig.GetDefaultModSelectionFilePath())
+                JValue.release(jModSelection)
+                JValue.zeroLifetime(jModSelection)
             endif
 
             i += 1
