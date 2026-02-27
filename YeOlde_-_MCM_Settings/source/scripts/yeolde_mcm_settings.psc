@@ -319,8 +319,8 @@ event OnPageReset(string a_page)
 
     ; Build compact mod list directly from _modNames, capturing real indices.
     ; Iterating _modNames directly avoids JContainers and eliminates Find() re-lookups in render loops.
-    string[] sortedModNames = Utility.CreateStringArray(128, "")
-    int[] sortedIndices = Utility.CreateIntArray(128, -1)
+    string[] sortedModNames = new String[128]
+    int[] sortedIndices = new Int[128]
     int nbMods = 0
     int nmIdx = 0
     while (nmIdx < _modNames.Length)
@@ -334,12 +334,15 @@ event OnPageReset(string a_page)
     Debug.Trace(self + ": " + nbMods + " registered mods, building '" + a_page + "'")
     ; Always keep _perModNames fresh so the per-mod selector works on any page.
     if (nbMods > 0)
-        _perModNames = Utility.CreateStringArray(nbMods, "")
+        int jPerMod = JArray.object()
         int pnFill = 0
         while (pnFill < nbMods)
-            _perModNames[pnFill] = sortedModNames[pnFill]
+            JArray.addStr(jPerMod, sortedModNames[pnFill])
             pnFill += 1
         endwhile
+        _perModNames = JArray.asStringArray(jPerMod)
+    else
+        _perModNames = None
     endif
     if a_page == "Show/hide menus"
 
@@ -350,8 +353,8 @@ event OnPageReset(string a_page)
 
         ;; Build filtered mod list, capturing pre-resolved indices alongside names
         int filteredCount = 0
-        string[] filteredMods = Utility.CreateStringArray(128, "")
-        int[] filteredIndices = Utility.CreateIntArray(128, -1)
+        string[] filteredMods = new String[128]
+        int[] filteredIndices = new Int[128]
         int fi = 0
         while (fi < nbMods)
             if (_modSearchFilter == "" || StringUtil.Find(sortedModNames[fi], _modSearchFilter) >= 0)
@@ -390,8 +393,10 @@ event OnPageReset(string a_page)
         endwhile
 
     elseif a_page == "Backup/Restore menus"
-        Quest qLAL = Quest.GetQuest("ARTHLALChargenQuest")
-        Quest qUnbound = Quest.GetQuest("SkyrimUnbound")
+        ; Detect alternative-start quests via Game.GetFormFromFile (returns None
+        ; when the plugin is not installed, so the safety check simply passes).
+        Quest qLAL = Game.GetFormFromFile(0x00000800, "Alternate Start - Live Another Life.esp") as Quest
+        Quest qUnbound = Game.GetFormFromFile(0x00000800, "SkyrimUnbound.esp") as Quest
 
         if (qLAL && !qLAL.IsCompleted())
             SetCursorFillMode(TOP_TO_BOTTOM)
@@ -443,7 +448,7 @@ event OnPageReset(string a_page)
             AddHeaderOption("Task Status")
             AddHeaderOption("")
 
-            _modMenuBackupInfos = Utility.CreateIntArray(nbMods, 0)
+            _modMenuBackupInfos = new Int[128]
             int iInfo = 0
             while (iInfo < nbMods)
                 _modMenuBackupInfos[iInfo] = AddTextOption("", "", OPTION_FLAG_HIDDEN)
@@ -1084,18 +1089,20 @@ endState
 
 state PerModSelector
     event OnMenuOpenST()
-        if (_perModNames == None || _perModNames.Length == 0)
-            string[] empty = new String[1]
-            empty[0] = "(no mods available)"
-            SetMenuDialogOptions(empty)
-            SetMenuDialogStartIndex(0)
-        else
+        ; Use _perModNames built in the OnPageReset preamble (same data as
+        ; SlotSelector uses — simple, no rebuild, no allocation in the handler).
+        if (_perModNames != None && _perModNames.Length > 0)
             SetMenuDialogOptions(_perModNames)
-            if (_perModSelectedIdx >= 0)
+            if (_perModSelectedIdx >= 0 && _perModSelectedIdx < _perModNames.Length)
                 SetMenuDialogStartIndex(_perModSelectedIdx)
             else
                 SetMenuDialogStartIndex(0)
             endif
+        else
+            string[] empty = new String[1]
+            empty[0] = "(no mods available)"
+            SetMenuDialogOptions(empty)
+            SetMenuDialogStartIndex(0)
         endif
         SetMenuDialogDefaultIndex(0)
     endEvent
@@ -1261,56 +1268,101 @@ state EditSelectMod
             _editSelectedModIdx = a_index
             _editSelectedKeyIdx = -1
             _editSelectedPageIdx = -1
-            SetMenuOptionValueST(_editModList[a_index])
+            string selectedMod = _editModList[a_index]
+            SetMenuOptionValueST(selectedMod)
 
-            ; Load keys for this mod (detect nested vs flat structure)
+            ; Load keys for this mod.
+            ; Backup format always uses page-keyed structure ("(none)" for the default
+            ; unnamed page, then named pages if the mod has them).  Filter out empty
+            ; pages so that mods with only one real page auto-load directly without
+            ; requiring an extra "Select Page" step.
             if (_lastImportedBackup > 0)
-                int jMod = JMap.getObj(_lastImportedBackup, _editModList[a_index])
+                int jMod = JMap.getObj(_lastImportedBackup, selectedMod)
                 if (jMod > 0)
                     string[] topKeys = JMap.allKeysPArray(jMod)
-                    bool isNested = false
-                    if (topKeys != None && topKeys.Length > 0)
-                        int testObj = JMap.getObj(jMod, topKeys[0])
-                        if (testObj > 0)
-                            isNested = true
-                        endif
+                    int topKeyCount = 0
+                    if (topKeys != None)
+                        topKeyCount = topKeys.Length
                     endif
-
-                    _editIsNested = isNested
-                    if (isNested)
-                        _editPageList = topKeys
-                        _editKeyList = None
-                        _editOptionIds = None
-                        int totalKeys = 0
+                    ; Build list of pages that actually contain options.
+                    string[] nonEmptyPages = new String[128]
+                    int npCount = 0
+                    if (topKeys != None)
                         int pi = 0
                         while (pi < topKeys.Length)
-                            int jPage = JMap.getObj(jMod, topKeys[pi])
-                            if (jPage > 0)
-                                totalKeys += JMap.count(jPage)
+                            int jPg = JMap.getObj(jMod, topKeys[pi])
+                            if (jPg > 0 && JMap.count(jPg) > 0)
+                                nonEmptyPages[npCount] = topKeys[pi]
+                                npCount += 1
                             endif
                             pi += 1
                         endwhile
-                        SetTextOptionValue(_editKeyCountOpt, totalKeys as string)
-                    else
+                    endif
+
+                    if (npCount == 0)
+                        ; Mod has no backed-up options.
+                        _editIsNested = false
                         _editPageList = None
-                        _editKeyList = topKeys
+                        _editKeyList = None
                         _editOptionIds = None
-                        int keyCountVal = 0
-                        if (topKeys != None)
-                            keyCountVal = topKeys.Length
+                    elseif (npCount == 1)
+                        ; Single non-empty page — treat as nested with page auto-selected
+                        ; so value reads use ReadNestedOptionValue (jMod has page structure,
+                        ; never flat option keys at top level).
+                        _editIsNested = true
+                        _editPageList = new String[1]
+                        _editPageList[0] = nonEmptyPages[0]
+                        _editSelectedPageIdx = 0
+                        int jSinglePage = JMap.getObj(jMod, nonEmptyPages[0])
+                        string[] optIds = JMap.allKeysPArray(jSinglePage)
+                        int numOpts = 0
+                        if (optIds != None)
+                            numOpts = optIds.Length
                         endif
-                        SetTextOptionValue(_editKeyCountOpt, keyCountVal as string)
+                        _editOptionIds = optIds
+                        if (numOpts > 0)
+                            int jKeys = JArray.object()
+                            int oi = 0
+                            while (oi < numOpts)
+                                int jOpt = JMap.getObj(jSinglePage, optIds[oi])
+                                if (jOpt > 0)
+                                    string stName = JMap.getStr(jOpt, "stateOption")
+                                    if (stName != "")
+                                        JArray.addStr(jKeys, stName)
+                                    else
+                                        JArray.addStr(jKeys, "#" + optIds[oi])
+                                    endif
+                                else
+                                    JArray.addStr(jKeys, optIds[oi])
+                                endif
+                                oi += 1
+                            endwhile
+                            _editKeyList = JArray.asStringArray(jKeys)
+                        else
+                            _editKeyList = None
+                        endif
+                    else
+                        ; Multiple non-empty pages — user must select a page first.
+                        _editIsNested = true
+                        int jPgs = JArray.object()
+                        int pfi = 0
+                        while (pfi < npCount)
+                            JArray.addStr(jPgs, nonEmptyPages[pfi])
+                            pfi += 1
+                        endwhile
+                        _editPageList = JArray.asStringArray(jPgs)
+                        _editKeyList = None
+                        _editOptionIds = None
                     endif
                 else
                     _editIsNested = false
                     _editKeyList = None
                     _editPageList = None
                     _editOptionIds = None
-                    SetTextOptionValue(_editKeyCountOpt, "0")
                 endif
+            else
             endif
 
-            SetTextOptionValue(_editCurrentValueOpt, "")
             ForcePageReset()
         endif
     endEvent
@@ -1362,22 +1414,23 @@ state EditSelectPage
                         endif
                         _editOptionIds = optIds
                         ; Build display names from state option or option ID
-                        _editKeyList = Utility.CreateStringArray(numOpts, "")
+                        int jKeys2 = JArray.object()
                         int oi = 0
                         while (oi < numOpts)
                             int jOpt = JMap.getObj(jPage, optIds[oi])
                             if (jOpt > 0)
                                 string stName = JMap.getStr(jOpt, "stateOption")
                                 if (stName != "")
-                                    _editKeyList[oi] = stName
+                                    JArray.addStr(jKeys2, stName)
                                 else
-                                    _editKeyList[oi] = "#" + optIds[oi]
+                                    JArray.addStr(jKeys2, "#" + optIds[oi])
                                 endif
                             else
-                                _editKeyList[oi] = optIds[oi]
+                                JArray.addStr(jKeys2, optIds[oi])
                             endif
                             oi += 1
                         endwhile
+                        _editKeyList = JArray.asStringArray(jKeys2)
                         SetTextOptionValue(_editKeyCountOpt, numOpts as string)
                     else
                         _editKeyList = None
@@ -1539,7 +1592,11 @@ state EditApply
             newDisplayVal = ReadValueAsString(jMod, keyName)
         endif
 
-        JValue.writeToFile(jMod, BackupConfig.GetDefaultBackupModDirectory() + modName)
+        string modWritePath = BackupConfig.GetDefaultBackupModDirectory() + modName
+        if (StringUtil.Find(modName, ".json") < 0)
+            modWritePath += ".json"
+        endif
+        JValue.writeToFile(jMod, modWritePath)
         SetTextOptionValue(_editCurrentValueOpt, newDisplayVal)
         SetTextOptionValueST("Saved!")
     endEvent
