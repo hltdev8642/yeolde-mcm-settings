@@ -85,6 +85,23 @@ Function UnregisterForUpdateGameTime() native
 Event OnAnimationEvent(ObjectReference akSource, string asEventName)
 EndEvent
 
+; --- SKSE extension functions ---
+
+; Registers a custom mod event callback
+Function RegisterForModEvent(string eventName, string callbackName) native
+
+; Unregisters a custom mod event callback
+Function UnregisterForModEvent(string eventName) native
+
+; Sends a custom mod event
+Function SendModEvent(string eventName, string strArg = "", float numArg = 0.0) native
+
+; Registers for a menu open/close event
+Function RegisterForMenu(string menuName) native
+
+; Unregisters for a menu open/close event
+Function UnregisterForMenu(string menuName) native
+
 ; Event sent when you have been unregistered from receiving an animation event because the target
 ; object's animation graph has been unloaded
 Event OnAnimationEventUnregistered(ObjectReference akSource, string asEventName)

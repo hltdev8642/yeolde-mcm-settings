@@ -1,4 +1,4 @@
-scriptname yeolde_mcm_settings extends YeOlde_SKI_ConfigBase
+ScriptName yeolde_mcm_settings extends YeOlde_SKI_ConfigBase
 
 import Game
 
