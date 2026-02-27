@@ -1,1 +1,1 @@
-Scriptname LocationRefType extends Form Hidden
+Scriptname LocationRefType extends Keyword Hidden

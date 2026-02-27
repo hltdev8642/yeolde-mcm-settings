@@ -1,1 +1,1 @@
-Scriptname Key extends Form Hidden
+Scriptname Key extends MiscObject Hidden

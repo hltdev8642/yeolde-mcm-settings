@@ -1,1 +1,1 @@
-Scriptname Static extends Form Hidden
+Scriptname Static Extends Form

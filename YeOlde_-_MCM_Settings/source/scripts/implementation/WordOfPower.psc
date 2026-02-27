@@ -1,1 +1,1 @@
-Scriptname WordOfPower extends Form Hidden
+Scriptname WordOfPower Extends Form Hidden
